@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 	"runtime"
 	"sync"
 	"time"
@@ -24,8 +25,201 @@ var (
 
 var wg = sync.WaitGroup{}
 var m = sync.RWMutex{}
+var logCh28 = make(chan logEntry, 50)
+var logCh27 = make(chan logEntry, 50)
+var doneCh = make(chan struct{}) // signal only channel length of message is empty
+
+const (
+	logInfo    = "INFO"
+	logWarning = "WARNING"
+	logError   = "ERROR"
+)
+
+type logEntry struct {
+	time     time.Time
+	severity string
+	message  string
+}
 
 func main() {
+	test28()
+	test27()
+	test26()
+	test25()
+	test24()
+	test23()
+	test22()
+	test21()
+	test20()
+}
+
+func test28() {
+	go logger28()
+
+	logCh28 <- logEntry{time.Now(), logInfo, "App is starting"}
+	logCh28 <- logEntry{time.Now(), logInfo, "App is shutting down"}
+	time.Sleep(100 * time.Millisecond)
+
+	doneCh <- struct{}{}
+	time.Sleep(10 * time.Millisecond)
+}
+
+func test27() {
+	go logger27()
+
+	defer func() { // make sure the logCh closes so the go logger() routine stops
+		close(logCh27)
+	}()
+
+	logCh27 <- logEntry{time.Now(), logInfo, "App is starting"}
+	logCh27 <- logEntry{time.Now(), logInfo, "App is shutting down"}
+	time.Sleep(100 * time.Millisecond)
+}
+
+func logger28() {
+	for {
+		select {
+		case entry := <-logCh28:
+			fmt.Printf("%v - [%v]%v\n", entry.time.Format("2006-01-02T15:04:05.000"), entry.severity, entry.message)
+		case <-doneCh:
+			fmt.Printf("Closing logger")
+			//close(logCh28)
+			//close(doneCh)
+			break
+		}
+	}
+}
+
+func logger27() {
+	for entry := range logCh27 {
+		fmt.Printf("%v - [%v]%v\n", entry.time.Format("2006-01-02T15:04:05.000"), entry.severity, entry.message)
+	}
+}
+
+func test26() {
+	fmt.Printf("%s\n", GetFunctionName(test01))
+	ch := make(chan int, 50) // make a buffered channel
+
+	wg.Add(2)
+
+	go func(ch <-chan int) { // define a reader channel
+		for {
+			if i, ok := <-ch; ok {
+				fmt.Println(i)
+			} else {
+				break
+			}
+		}
+		wg.Done()
+	}(ch)
+
+	go func(ch chan<- int) { // define a writer channel
+		ch <- 42  // add data into the channel (reader and writer)
+		ch <- 27  // only first message is read
+		close(ch) // close the channel
+		wg.Done()
+	}(ch)
+
+	wg.Wait()
+}
+
+func GetFunctionName(i interface{}) string {
+	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
+}
+
+func test25() {
+	fmt.Printf("%T\n", test01)
+	ch := make(chan int, 50) // make a buffered channel
+
+	wg.Add(2)
+
+	go func(ch <-chan int) { // define a reader channel
+		for i := range ch {
+			fmt.Println(i)
+		}
+		wg.Done()
+	}(ch)
+
+	go func(ch chan<- int) { // define a writer channel
+		ch <- 42  // add data into the channel (reader and writer)
+		ch <- 27  // only first message is read
+		close(ch) // close the channel
+		wg.Done()
+	}(ch)
+
+	wg.Wait()
+}
+
+func test24() {
+	ch := make(chan int, 50) // make a buffered channel
+
+	wg.Add(2)
+	go func(ch <-chan int) { // define a reader channel
+		i := <-ch // get data from the channel (reader and writer)
+		fmt.Println(i)
+		wg.Done()
+	}(ch)
+	go func(ch chan<- int) { // define a writer channel
+		ch <- 42 // add data into the channel (reader and writer)
+		ch <- 27 // only first message is read
+		wg.Done()
+	}(ch)
+
+	wg.Wait()
+}
+
+func test23() {
+	ch := make(chan int)
+
+	wg.Add(2)
+	go func(ch <-chan int) { // define a reader channel
+		i := <-ch // get data from the channel (reader and writer)
+		fmt.Println(i)
+		wg.Done()
+	}(ch)
+	go func(ch chan<- int) { // define a writer channel
+		ch <- 42 // add data into the channel (reader and writer)
+		wg.Done()
+	}(ch)
+
+	wg.Wait()
+}
+
+func test22() {
+	ch := make(chan int)
+
+	wg.Add(2)
+	go func() {
+		i := <-ch // get data from the channel (reader and writer)
+		fmt.Println(i)
+		ch <- 27
+		wg.Done()
+	}()
+	go func() {
+		ch <- 42 // add data into the channel (reader and writer)
+		fmt.Println(<-ch)
+		wg.Done()
+	}()
+
+	wg.Wait()
+}
+
+func test21() {
+	ch := make(chan int)
+	wg.Add(2)
+	go func() {
+		i := <-ch // get data from the channel
+		fmt.Println(i)
+		wg.Done()
+	}()
+	go func() {
+		ch <- 42 // add data into the channel
+		wg.Done()
+	}()
+	wg.Wait()
+}
+
+func test20() {
 	runtime.GOMAXPROCS(1)                               // set maximum number threads
 	fmt.Printf("Threads: %v\n", runtime.GOMAXPROCS(-1)) // get all available threads
 }
@@ -52,7 +246,6 @@ func increment() {
 	counter++
 	m.Unlock()
 	wg.Done()
-
 }
 
 func test18() {
